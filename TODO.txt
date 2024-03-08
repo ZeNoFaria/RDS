@@ -1,0 +1,7 @@
+alterar class na topologia para vários thrift-servers
+tabela firewall só precisa da açao alow e drop e ja estao definidas
+descobrir como se faz os switches
+
+server sao iguais a hosts no mininet   sao
+firewall a entrada ou saida            nos 2
+porta nos switches                     nao tem thrift port
