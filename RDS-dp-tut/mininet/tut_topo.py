@@ -31,6 +31,7 @@ from mininet.net import Mininet
 from mininet.topo import Topo
 from mininet.log import setLogLevel, info
 from mininet.cli import CLI
+from mininet.node import OVSSwitch, Controller
 
 from p4_mininet import P4Switch, P4Host
 
@@ -65,12 +66,6 @@ host_mac_base = "00:04:00:00:00:%02x"
 sw_ip_base = "10.0.%d.254"
 host_ip_base =  "10.0.%d.1/24"
 
-lans = [
-    [],
-    [],
-    []
-]
-
 
 class SingleSwitchTopo(Topo):
     def __init__(self, sw_path, json_path, thrift_port, n, **opts):
@@ -90,47 +85,69 @@ class SingleSwitchTopo(Topo):
             sw_mac = sw_mac_base % (h + 1)
             self.addLink(host, switch, addr2=sw_mac)
 
+class DoubleSwitchTopo(Topo):
+    def __init__(self, sw_path, json_path, thrift_port, n, **opts):
+        # Call __init__ of Topo class
+        Topo.__init__(self, **opts)
+        # Create routers using P4Switch
+        routers = []
+        for r in range(2):
+            router = self.addSwitch('R%d' % r, cls=P4Switch, sw_path=sw_path, json_path=json_path, thrift_port=thrift_port)
+            routers.append(router)
 
+        # Link routers in a circle
+        self.addLink(routers[0], routers[1])
+
+        for i in range(2):
+            host = self.addHost('h%d' % (s * 3 + i + 1),
+                                ip = host_ip_base % (s * 3 + i + 1),
+                                mac = host_mac_base % (s * 3 + i + 1))
+            self.addLink(router[i], host)
+        
 class TripleSwitchTopo(Topo):
     def __init__(self, sw_path, json_path, thrift_port, n, **opts):
-        # Initialize topology and default options
+        # Call __init__ of Topo class
         Topo.__init__(self, **opts)
-        # adding a P4Switch
-        for s in range(3)
-            switch = self.addSwitch('R%d' % s,
-                                    sw_path = sw_path,                       #mudar thrift port para uma lista
-                                    json_path = json_path,                  
-                                    thrift_port = thrift_port)
-                thrift_port = thrift_port + 1
-        # adding host and link with the right mac and ip addrs
-        # declaring a link: addr2=sw_mac gives a mac to the switch port
-        
-        v = 1
-        for h in range(3):  
-            for i in range(3):                                              
-                host = self.addHost('h%d' % v,
-                                    ip = host_ip_base % v,
-                                    mac = host_mac_base % v)
-                sw_mac = sw_mac_base % v
+        # Create routers using P4Switch
+        routers = []
+        for r in range(3):
+            router = self.addSwitch('R%d' % r, cls=P4Switch, sw_path=sw_path, json_path=json_path, thrift_port=thrift_port)
+            routers.append(router)
 
-                lans[h][i] = host
+        # Link routers in a circle
+        for i in range(3):
+            self.addLink(routers[i], routers[(i + 1) % 3])
+            
+        # Create network switches using OVSSwitch
+        switches = []
+        for s in range(3):
+            switch = self.addSwitch('S%d' % s, cls=OVSSwitch)
+            switches.append(switch)
 
-                self.addLink(host, switch, addr2=sw_mac)
+        # Add links between routers and switches
+        for router, switch in zip(routers, switches):
+            self.addLink(router, switch)
+
+        # Add hosts and links to switches
+        for s, switch in enumerate(switches):
+            for i in range(3):
+                host = self.addHost('h%d' % (s * 3 + i + 1),
+                                    ip = host_ip_base % (s * 3 + i + 1),
+                                    mac = host_mac_base % (s * 3 + i + 1))
+                self.addLink(switch, host)
+                
 
 def main():
     num_hosts = args.num_hosts
 
-    topo = SingleSwitchTopo(args.behavioral_exe,
+    topo = TripleSwitchTopo(args.behavioral_exe,
                             args.json,
                             args.thrift_port,
                             num_hosts)
 
     # the host class is the P4Host
     # the switch class is the P4Switch
-    net = Mininet(topo = topo,
-                  host = P4Host,
-                  switch = P4Switch,
-                  controller = None)
+    net = Mininet(topo = topo,controller=None)
 
     # Here, the mininet will use the constructor (__init__()) of the P4Switch class, 
     # with the arguments passed to the SingleSwitchTopo class in order to create 
@@ -143,6 +160,7 @@ def main():
     # they are only used to define defaultRoutes on hosts 
     sw_addr = [sw_ip_base % (n + 1) for n in range(num_hosts)]
 
+
     #h.setARP(sw_addr[n], sw_mac[n]) # populates the arp table of the host
     #h.setDefaultRoute("dev eth0 via %s" % sw_addr[n]) # sets the defaultRoute for the host
     # populating the arp table of the host with the switch ip and switch mac
@@ -154,7 +172,7 @@ def main():
 
     for n in range(num_hosts):
         h = net.get('h%d' % (n + 1))
-        h.describe()
+        #h.describe()
 
     sleep(1)  # time for the host and switch confs to take effect
 
