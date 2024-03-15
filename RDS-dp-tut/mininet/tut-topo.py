@@ -94,15 +94,16 @@ class DoubleSwitchTopo(Topo):
         for r in range(2):
             router = self.addSwitch('R%d' % r, cls=P4Switch, sw_path=sw_path, json_path=json_path, thrift_port=thrift_port)
             routers.append(router)
+            thrift_port = thrift_port + 1
 
         # Link routers in a circle
         self.addLink(routers[0], routers[1])
 
         for i in range(2):
-            host = self.addHost('h%d' % (s * 3 + i + 1),
-                                ip = host_ip_base % (s * 3 + i + 1),
-                                mac = host_mac_base % (s * 3 + i + 1))
-            self.addLink(router[i], host)
+            host = self.addHost('h%d' % (i + 1),
+                                ip = host_ip_base % (i + 1),
+                                mac = host_mac_base % (i + 1))
+            self.addLink(routers[i], host)
         
 class TripleSwitchTopo(Topo):
     def __init__(self, sw_path, json_path, thrift_port, n, **opts):
@@ -113,6 +114,7 @@ class TripleSwitchTopo(Topo):
         for r in range(3):
             router = self.addSwitch('R%d' % r, cls=P4Switch, sw_path=sw_path, json_path=json_path, thrift_port=thrift_port)
             routers.append(router)
+            thrift_port = thrift_port + 1
 
         # Link routers in a circle
         for i in range(3):
@@ -140,7 +142,7 @@ class TripleSwitchTopo(Topo):
 def main():
     num_hosts = args.num_hosts
 
-    topo = TripleSwitchTopo(args.behavioral_exe,
+    topo = DoubleSwitchTopo(args.behavioral_exe,
                             args.json,
                             args.thrift_port,
                             num_hosts)
