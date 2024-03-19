@@ -113,6 +113,7 @@ class TripleSwitchTopo(Topo):
         routers = []
         for r in range(3):
             router = self.addSwitch('R%d' % r, cls=P4Switch, sw_path=sw_path, json_path=json_path, thrift_port=thrift_port)
+            
             routers.append(router)
             thrift_port = thrift_port + 1
 
