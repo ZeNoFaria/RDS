@@ -1,3 +1,14 @@
 ---19-03---
 Descobri como associar os files das regras aos routers (criei uma script que trata disso e que tem de ser atualizada posteriormente)
 Problema com atribuição de ip's às interfaces dos routers(atribuir o ip à interface quando é realizado o link parece ser uma solução possível)
+    - isto nao me permite definir as regras visto que nao consigo dizer qual o ip do next hop quando este é uma interface de um router visto que nao foi atribuido um ip à mesma
+
+
+---22-03---
+Ips das interfaces dos routers
+Mac adresses 
+atribuir ips corretos
+
+--26-03---
+ja pinta
+Problema com ARP tables???
