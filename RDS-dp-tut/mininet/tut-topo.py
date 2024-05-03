@@ -66,7 +66,7 @@ sw_mac_base = "00:aa:bb:00:00:%02x"
 host_mac_base = "00:04:00:00:00:%02x"
 
 sw_ip_base = "10.0.%d.254"
-host_ip_base =  "10.0.%d.0/24"
+host_ip_base =  "10.0.%d.%d/24"
 
 ips = [10,20,100]
 
@@ -85,7 +85,7 @@ class SingleSwitchTopo(Topo):
         # declaring a link: addr2=sw_mac gives a mac to the switch port
         for h in range(n):                                              
             host = self.addHost('h%d' % (h + 1),
-                                ip = host_ip_base % (h + 1),
+                                ip = host_ip_base % ((h + 1)),
                                 mac = host_mac_base % (h + 1))
             sw_mac = sw_mac_base % (h + 1)
             self.addLink(host, switch, addr2=sw_mac)
@@ -130,7 +130,7 @@ class TripleSwitchTopo(Topo):
         # Create routers using P4Switch
         routers = []
         for r in range(3):
-            router = self.addSwitch('R%d' % r, cls=P4Switch, sw_path=sw_path, json_path=json_path, thrift_port=thrift_port)
+            router = self.addSwitch('R%d' % (r+1), cls=P4Switch, sw_path=sw_path, json_path=json_path, thrift_port=thrift_port)
             routers.append(router)
             thrift_port = thrift_port + 1
 
@@ -144,29 +144,30 @@ class TripleSwitchTopo(Topo):
                         addr1=adr1, addr2=adr2)
             comp = comp + 1
         # Create network switches using OVSSwitch
-        #switches = []
-        #for s in range(3):
-        #    switch = self.addSwitch('S%d' % s, cls=OVSSwitch)
-        #    switches.append(switch)
+        switches = []
+        for s in range(3):
+            switch = self.addSwitch('S%d' % (s+1), cls=OVSSwitch)
+            switches.append(switch)
 
         # Assuming routers and switches are lists of equal length
-        #for i, (router, switch) in enumerate(zip(routers, switches)):
-        #    self.addLink(router, switch, addr1=(sw_mac_base % (i + 6)))
+        for i, (router, switch) in enumerate(zip(routers, switches)):
+            self.addLink(router, switch, addr1=(sw_mac_base % (i + 7)),addr2=(sw_mac_base % (i + 10)))
 
 
         # Add hosts and connect them to the network switches
-        for s, switch  in enumerate(routers):
+        for s, switch  in enumerate(switches):
             for i in range(3):
                 host = self.addHost('h%d' % (s * 3 + i + 1),
-                                    ip = host_ip_base % (s * 3 + i + 1),
+                                    ip = host_ip_base % ((s+1),ips[i]),
                                     mac = host_mac_base % (s * 3 + i + 1))
-                self.addLink(switch, host, addr1=(sw_mac_base % (s * 3 + i + 7)))
+                self.addLink(switch, host, addr1=(sw_mac_base % (s * 3 + i + 13)))
+            
             
 
 def main():
     num_hosts = args.num_hosts
 
-    topo = DoubleSwitchTopo(args.behavioral_exe,
+    topo = TripleSwitchTopo(args.behavioral_exe,
                             args.json,
                             args.thrift_port,
                             num_hosts)
@@ -186,16 +187,47 @@ def main():
     # they are only used to define defaultRoutes on hosts 
     sw_addr = [sw_ip_base % (n + 1) for n in range(num_hosts)]
 
-
+    
     #h.setARP(sw_addr[n], sw_mac[n]) # populates the arp table of the host
     #h.setDefaultRoute("dev eth0 via %s" % sw_addr[n]) # sets the defaultRoute for the host
     # populating the arp table of the host with the switch ip and switch mac
     # avoids the need for arp request from the host
-    for n in range(num_hosts):
-        h = net.get('h%d' % (n + 1))
-        h.setARP(sw_addr[n], sw_mac[n])
-        h.setDefaultRoute("dev eth0 via %s" % sw_addr[n])
+    h1 = net.get('h1')
+    h1.setARP("10.0.1.254", "00:aa:bb:00:00:07")
+    h1.setDefaultRoute("dev eth0 via 10.0.1.254")
 
+    h2 = net.get('h2')
+    h2.setARP("10.0.1.254", "00:aa:bb:00:00:07")
+    h2.setDefaultRoute("dev eth0 via 10.0.1.254")
+    
+    h3 = net.get('h3')
+    h3.setARP("10.0.1.254", "00:aa:bb:00:00:07")
+    h3.setDefaultRoute("dev eth0 via 10.0.1.254")
+
+    h4 = net.get('h4')
+    h4.setARP("10.0.2.254", "00:aa:bb:00:00:08")
+    h4.setDefaultRoute("dev eth0 via 10.0.2.254")
+
+    h5 = net.get('h5')
+    h5.setARP("10.0.2.254", "00:aa:bb:00:00:08")
+    h5.setDefaultRoute("dev eth0 via 10.0.2.254")
+    
+    h6 = net.get('h6')
+    h6.setARP("10.0.2.254", "00:aa:bb:00:00:08")
+    h6.setDefaultRoute("dev eth0 via 10.0.2.254")
+
+    h7 = net.get('h7')
+    h7.setARP("10.0.3.254", "00:aa:bb:00:00:09")
+    h7.setDefaultRoute("dev eth0 via 10.0.3.254")
+
+    h8 = net.get('h8')
+    h8.setARP("10.0.3.254", "00:aa:bb:00:00:09")
+    h8.setDefaultRoute("dev eth0 via 10.0.3.254")
+    
+    h9 = net.get('h9')
+    h9.setARP("10.0.3.254", "00:aa:bb:00:00:09")
+    h9.setDefaultRoute("dev eth0 via 10.0.3.254")
+    
     for n in range(num_hosts):
         h = net.get('h%d' % (n + 1))
         h.describe()
