@@ -1,5 +1,4 @@
 reset_state
-table_set_default ipv4_lpm drop
 table_set_default src_mac drop
 table_set_default dst_mac drop
 table_add ipv4_lpm ipv4_fwd 10.0.2.10/32 => 10.0.2.10 3
@@ -15,3 +14,25 @@ table_add dst_mac rewrite_dst_mac 192.168.23.3 => 00:aa:bb:00:00:04
 table_add dst_mac rewrite_dst_mac 10.0.2.10 => 00:04:00:00:00:04
 table_add dst_mac rewrite_dst_mac 10.0.2.20 => 00:04:00:00:00:05
 table_add dst_mac rewrite_dst_mac 10.0.2.100 => 00:04:00:00:00:06
+table_add firewall_new drop 10.0.1.0/24 10.0.3.20  0x06 0->65535 0->442        => 1
+table_add firewall_new drop 10.0.1.0/24 10.0.3.20  0x06 0->65535 444->65535    => 1
+table_add firewall_new drop 10.0.1.0/24 10.0.3.100 0x06 0->65535 0->442        => 1
+table_add firewall_new drop 10.0.1.0/24 10.0.3.100 0x06 0->65535 444->65535    => 1
+table_add firewall_new drop 10.0.2.0/24 10.0.3.10  0x06 0->65535 0->21         => 1
+table_add firewall_new drop 10.0.2.0/24 10.0.3.10  0x06 0->65535 23->65535     => 1
+table_add firewall_new drop 10.0.2.0/24 10.0.3.100 0x06 0->65535 0->21         => 1
+table_add firewall_new drop 10.0.2.0/24 10.0.3.100 0x06 0->65535 23->65535     => 1
+table_add firewall_new drop 10.0.1.0/24 10.0.3.10  0x06 0->8079 0->442         => 1
+table_add firewall_new drop 10.0.1.0/24 10.0.3.10  0x06 0->8079 444->65535     => 1
+table_add firewall_new drop 10.0.1.0/24 10.0.3.10  0x06 8081->65535 0->442     => 1
+table_add firewall_new drop 10.0.1.0/24 10.0.3.10  0x06 8081->65535 444->65535 => 1
+table_add firewall_new drop 10.0.2.0/24 10.0.3.20  0x06 0->442 0->21           => 1
+table_add firewall_new drop 10.0.2.0/24 10.0.3.20  0x06 0->442 23->65535       => 1
+table_add firewall_new drop 10.0.2.0/24 10.0.3.20  0x06 444->65535 0->21       => 1
+table_add firewall_new drop 10.0.2.0/24 10.0.3.20  0x06 444->65535 23->65535   => 1
+table_add allow_TCP_only drop 0x00->0x00 => 100
+table_add allow_TCP_only drop 0x02->0x05 => 100
+table_add allow_TCP_only drop 0x07->0xff => 100
+table_add ICMP_to_Interface send_icmp_reply 0x01 10.0.6.253 =>
+table_add ICMP_to_Interface send_icmp_reply 0x01 10.0.3.253 =>
+table_add ICMP_to_Interface send_icmp_reply 0x01 10.0.4.252 =>

@@ -13,6 +13,7 @@
 const bit<16> TYPE_IPV4 = 0x800;
 const bit<8> TYPE_TCP  = 0x06;
 const bit<8> TYPE_UDP  = 0x11;
+const bit<8> TYPE_ICMP = 0x01;
 
 /*************************************************************************
 *********************** H E A D E R S  ***********************************
@@ -36,6 +37,13 @@ header ethernet_t {
     macAddr_t dstAddr;
     macAddr_t srcAddr;
     bit<16>   etherType;
+}
+
+header icmp_t {
+    bit<8>  type;
+    bit<8>  code;
+    bit<16> checksum;
+    bit<32> restOfHeader;
 }
 
 header ipv4_t {
@@ -82,6 +90,7 @@ struct headers {
     ethernet_t   ethernet;
     ipv4_t       ipv4;
     tcp_t        tcp;
+    icmp_t       icmp;
 }
 
 /*************************************************************************
@@ -98,25 +107,44 @@ parser MyParser(packet_in packet,
      * transition <next-state>
      * transition select(<expression>) -> works like a switch case
      */
+
     state start {
         transition parse_ethernet;
     }
-
     
+
     state parse_ethernet {
-        packet.extract(hdr.ethernet);
+        packet.extract(hdr.ethernet); // extract function populates the ethernet header
         transition select(hdr.ethernet.etherType) {
-            TYPE_IPV4:  parse_ipv4;
+            TYPE_IPV4: parse_ipv4;
             default: accept;
         }
     }
-    
-    state parse_ipv4{
-    	packet.extract(hdr.ipv4);
-    	transition accept;
-    }
-    
 
+    // state parse_ipv4 {
+    //     packet.extract(hdr.ipv4); // extract function populates the ipv4 header
+    //     transition accept;
+    // }
+
+
+    state parse_ipv4 {
+        packet.extract(hdr.ipv4);
+        transition select(hdr.ipv4.protocol){
+            TYPE_TCP: parse_tcp;
+            TYPE_ICMP: parse_icmp;
+            default:accept;
+        }
+    }
+
+    state parse_tcp {
+        packet.extract(hdr.tcp);
+        transition accept;
+    }
+
+    state parse_icmp {
+        packet.extract(hdr.icmp);
+        transition accept;
+    }
 }
 
 /*************************************************************************
@@ -135,33 +163,49 @@ control MyVerifyChecksum(inout headers hdr, inout metadata meta) {
 control MyIngress(inout headers hdr,
                   inout metadata meta,
                   inout standard_metadata_t standard_metadata) {
+
+                    
     action drop() {
         mark_to_drop(standard_metadata);
     }
 
-    /**
-    * this is your main pipeline
-    * where we define the actions and tables
-    */
-
-    action ipv4_fwd(ip4Addr_t nxt_hop, egressSpec_t port){
-    	meta.next_hop_ipv4 = nxt_hop;
-    	standard_metadata.egress_spec = port;
-    	hdr.ipv4.ttl = hdr.ipv4.ttl - 1;    
-    }
-    
-    table ipv4_lpm {
-        key = { hdr.ipv4.dstAddr : lpm; }
-        actions = {
-            ipv4_fwd;
-            drop;
-            NoAction;
-            }
-        default_action = NoAction(); // NoAction is defined in v1model - does nothing
+    action ipv4_fwd(ip4Addr_t nxt_hop, egressSpec_t port) {
+        meta.next_hop_ipv4 = nxt_hop;
+        standard_metadata.egress_spec = port;
+        hdr.ipv4.ttl = hdr.ipv4.ttl - 1;
     }
 
     action rewrite_src_mac(macAddr_t src_mac) {
         hdr.ethernet.srcAddr = src_mac;
+    }
+
+    action rewrite_dst_mac(macAddr_t dst_mac) {
+        hdr.ethernet.dstAddr = dst_mac;
+    }
+
+    action send_icmp_reply() {
+        bit<48> tmp_mac; 
+        tmp_mac = hdr.ethernet.srcAddr;
+        hdr.ethernet.srcAddr = hdr.ethernet.dstAddr;
+        hdr.ethernet.dstAddr = tmp_mac;
+
+        bit<32> tmp_ip;
+        tmp_ip = hdr.ipv4.srcAddr;
+        hdr.ipv4.srcAddr = hdr.ipv4.dstAddr;
+        hdr.ipv4.dstAddr = tmp_ip;
+
+        hdr.icmp.type = 0;
+
+        standard_metadata.egress_spec = standard_metadata.ingress_port;
+    }
+
+    table dst_mac {
+        key = {meta.next_hop_ipv4: exact;}
+        actions = {
+            rewrite_dst_mac;
+            drop;
+        }
+        default_action = drop;
     }
 
     table src_mac {
@@ -170,30 +214,78 @@ control MyIngress(inout headers hdr,
             rewrite_src_mac;
             drop;
         }
-
         default_action = drop;
     }
 
 
-    action rewrite_dst_mac(macAddr_t dst_mac) {
-        hdr.ethernet.dstAddr = dst_mac;
-    }
- 
-    table dst_mac {
-        key = { meta.next_hop_ipv4 : exact; }
+    table ipv4_lpm {    
+        key = { hdr.ipv4.dstAddr : lpm; }
         actions = {
-            rewrite_dst_mac;
-            drop;
+        ipv4_fwd;   
+        drop;
+        NoAction;
         }
-
-        default_action = drop;
+        default_action = NoAction(); // NoAction is defined in v1model - does nothing
     }
 
+    table firewall_new {
+        key = { 
+            hdr.ipv4.srcAddr : lpm;
+            hdr.ipv4.dstAddr : exact;
+            hdr.ipv4.protocol: exact;
+            hdr.tcp.dstPort: range;
+            hdr.tcp.srcPort: range;
+        }
+        actions = {
+            drop;
+            NoAction;
+        }
+        default_action = NoAction();
+    }
+
+    table allow_TCP_only {
+        key = {
+            hdr.ipv4.protocol: range;
+        }
+        actions = {
+            drop;
+            NoAction;
+        }
+        default_action = NoAction();
+    }
+
+    table ICMP_to_Interface {
+        key = {
+            hdr.ipv4.protocol: exact;
+            hdr.ipv4.dstAddr : exact;
+        }
+        actions = {
+            send_icmp_reply;
+            NoAction;
+        }
+        default_action = NoAction();
+    }
+
+    table drop_some_ICMP {
+        key = {
+            hdr.ipv4.protocol: exact;
+            hdr.ipv4.srcAddr: exact;
+        }
+        actions = {
+            drop;
+            NoAction;
+        }
+        default_action = NoAction();
+    }
+    
     apply {
         if (hdr.ipv4.isValid()) {
             ipv4_lpm.apply();
             src_mac.apply();
             dst_mac.apply();
+            firewall_new.apply();
+            allow_TCP_only.apply();
+            ICMP_to_Interface.apply();
         }
     }
 }
@@ -241,7 +333,8 @@ control MyDeparser(packet_out packet, in headers hdr) {
     apply {
         packet.emit(hdr.ethernet);
         packet.emit(hdr.ipv4);
-        
+        packet.emit(hdr.tcp);
+        packet.emit(hdr.icmp);
     }
 }
 
